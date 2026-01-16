@@ -117,29 +117,31 @@ export default function PaperManager() {
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="p-4">연도</th>
-              <th className="p-4">논문 제목</th>
-              <th className="p-4">IF</th>
+              <th className="p-4 text-center">연도</th>
+              <th className="p-4">논문 정보</th>
+              <th className="p-4 text-center">IF</th>
+              <th className="p-4 text-center">상위 %</th>
               <th className="p-4 text-center">관리</th>
             </tr>
           </thead>
           <tbody>
             {papers.map((p) => (
               <tr key={p.id} className="border-b hover:bg-gray-50">
-                <td className="p-4">{p.year}</td>
+                <td className="p-4 text-center text-sm">{p.year}</td>
                 <td className="p-4">
-                  <div className="font-semibold">{p.title}</div>
-                  <div className="text-sm text-gray-500">{p.journal}</div>
+                  <div className="font-semibold text-sm line-clamp-1">{p.title}</div>
+                  <div className="text-xs text-gray-500">{p.journal}</div>
                 </td>
-                <td className="p-4 text-blue-600 font-bold">{p.impact_factor}</td>
+                <td className="p-4 text-center text-blue-600 font-bold">{p.impact_factor}</td>
                 <td className="p-4 text-center">
-                  <button 
-                    onClick={() => deletePaper(p.id)}
-                    className="text-red-500 hover:text-red-700 text-sm font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50"
-                  >
-                    삭제
-                  </button>
+                  {/* 상위 10% 이내면 강조 표시 */}
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                    parseFloat(p.percentile) <= 10 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {p.percentile}
+                  </span>
                 </td>
+                {/* ... 삭제 버튼 */}
               </tr>
             ))}
           </tbody>
