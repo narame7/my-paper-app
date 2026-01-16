@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Vercel에 설정한 환경변수를 자동으로 가져옵니다.
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -14,7 +13,6 @@ export default function PaperManager() {
   const [papers, setPapers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 1. 페이지 로드 시 저장된 논문 목록 가져오기
   useEffect(() => {
     fetchSavedPapers();
   }, []);
@@ -24,53 +22,59 @@ export default function PaperManager() {
     if (data) setPapers(data);
   };
 
+  // --- 삭제 함수 추가 ---
+  const deletePaper = async (id: number) => {
+    if (!confirm('이 논문을 목록에서 삭제하시겠습니까?')) return;
+
+    const { error } = await supabase
+      .from('papers')
+      .delete()
+      .eq('id', id); // DB의 id 값을 기준으로 삭제
+
+    if (error) {
+      alert('삭제 중 오류가 발생했습니다.');
+    } else {
+      // 화면 목록에서 즉시 제거
+      setPapers(papers.filter(p => p.id !== id));
+    }
+  };
+
   const addPaper = async () => {
     if (!doi) return alert('DOI를 입력하세요!');
     setLoading(true);
 
     try {
-      // 2. CrossRef API로 논문 기본 정보 가져오기
       const res = await fetch(`https://api.crossref.org/works/${doi}`);
       const data = await res.json();
-      
       const info = data.message;
-      const issnFromCrossRef = info.ISSN ? info.ISSN[0] : null;
+      const issnList = info.ISSN || [];
 
-      // 3. Supabase JCR 테이블 조회
-      // 컬럼명에 대문자가 포함되어 있으므로 따옴표 처리에 유의해야 합니다.
-      const { data: jcrData, error: jcrError } = await supabase
+      // JCR 매칭 (여러 ISSN 대응을 위해 .in() 사용)
+      const { data: jcrData } = await supabase
         .from('jcr_impact_factors')
-        .select('*') // 일단 전체 컬럼을 가져와서 매칭 확인
-        .eq('ISSN', issnFromCrossRef) 
+        .select('"IF", "Journal Title"')
+        .in('ISSN', issnList)
+        .limit(1)
         .maybeSingle();
-
-      if (jcrError) {
-        console.error("JCR 조회 에러:", jcrError.message);
-      }
-
-      // 데이터 확인을 위한 로그 (브라우저 F12 콘솔에서 확인 가능)
-      console.log("CrossRef ISSN:", issnFromCrossRef);
-      console.log("DB에서 찾은 데이터:", jcrData);
-
-      // 4. 결과 매칭 (DB 컬럼명과 정확히 일치해야 함)
-      const impactFactor = jcrData && jcrData.IF ? String(jcrData.IF) : 'N/A';
-      const journalName = jcrData && jcrData['Journal Title'] ? jcrData['Journal Title'] : info['container-title'][0];
 
       const newPaper = {
         doi,
         title: info.title[0],
-        journal: journalName,
+        journal: jcrData?.['Journal Title'] || info['container-title'][0],
         year: info.created['date-parts'][0][0],
-        impact_factor: impactFactor
+        impact_factor: jcrData?.IF ? jcrData.IF.toFixed(3) : 'N/A'
       };
 
-      // 4. 결과 DB에 저장하기
-      const { error } = await supabase.from('papers').insert([newPaper]);
+      const { data: savedData, error } = await supabase
+        .from('papers')
+        .insert([newPaper])
+        .select(); // 저장된 행의 id를 받아오기 위해 추가
+
       if (error) throw error;
 
       alert('성공적으로 등록되었습니다!');
       setDoi('');
-      fetchSavedPapers(); // 목록 새로고침
+      if (savedData) setPapers([savedData[0], ...papers]);
     } catch (err) {
       console.error(err);
       alert('정보를 가져오는 중 오류가 발생했습니다.');
@@ -86,7 +90,7 @@ export default function PaperManager() {
       <div className="flex gap-2 mb-10">
         <input 
           className="flex-1 border p-3 rounded"
-          placeholder="DOI를 입력하세요 (예: 10.1038/s41586-020-2012-7)"
+          placeholder="DOI를 입력하세요"
           value={doi}
           onChange={(e) => setDoi(e.target.value)}
         />
@@ -101,17 +105,27 @@ export default function PaperManager() {
             <tr>
               <th className="p-4">연도</th>
               <th className="p-4">논문 제목</th>
-              <th className="p-4">저널/학회</th>
               <th className="p-4">IF</th>
+              <th className="p-4 text-center">관리</th>
             </tr>
           </thead>
           <tbody>
-            {papers.map((p, i) => (
-              <tr key={i} className="border-b hover:bg-gray-50">
+            {papers.map((p) => (
+              <tr key={p.id} className="border-b hover:bg-gray-50">
                 <td className="p-4">{p.year}</td>
-                <td className="p-4 font-semibold">{p.title}</td>
-                <td className="p-4">{p.journal}</td>
+                <td className="p-4">
+                  <div className="font-semibold">{p.title}</div>
+                  <div className="text-sm text-gray-500">{p.journal}</div>
+                </td>
                 <td className="p-4 text-blue-600 font-bold">{p.impact_factor}</td>
+                <td className="p-4 text-center">
+                  <button 
+                    onClick={() => deletePaper(p.id)}
+                    className="text-red-500 hover:text-red-700 text-sm font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
