@@ -42,7 +42,7 @@ export default function PaperManager() {
         .select('"IF", "Journal Title"') // 공백이 있는 경우 따옴표로 감싸는 것이 안전합니다.
         .eq('ISSN', issn) // CrossRef에서 가져온 ISSN과 매칭
         .limit(1) // 동일 ISSN에 여러 카테고리가 있을 수 있으므로 하나만 가져옵니다.
-        .single();
+        .maybeSingle(); // 결과가 없어도 에러(빨간색 로그)를 내지 않고 null을 반환합니다.
 
       if (jcrError) console.log("JCR 매칭 실패:", jcrError.message);
 
