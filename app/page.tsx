@@ -53,24 +53,21 @@ export default function PaperManager() {
 
       console.log("CrossRef에서 받은 ISSN 리스트:", issnList);
 
-      // 3. Supabase JCR 테이블 조회
-      // .in() 연산자는 배열 안의 값 중 하나라도 일치하면 데이터를 가져옵니다.
-      const { data: jcrRows, error: jcrError } = await supabase
+      // 3. Supabase JCR 테이블 조회 (Rank 정보 포함)
+      const { data: jcrRows } = await supabase
         .from('jcr_impact_factors')
-        .select('"IF", "Journal Title", "ISSN"')
-        .in('ISSN', issnList) // [ '1234-5678', '8765-4321' ] 중 일치하는 것 검색
+        .select('"IF", "Journal Title", "Rank", "Number of same category"')
+        .in('ISSN', issnList)
         .order('IF', { ascending: false })
         .limit(1);
 
-      if (jcrError) console.error("JCR 조회 중 에러 발생:", jcrError.message);
+      const jcrData = jcrRows?.[0];
 
-      const jcrData = jcrRows && jcrRows.length > 0 ? jcrRows[0] : null;
-
-      // 디버깅: 실제 매칭 결과를 콘솔에 출력
-      if (!jcrData) {
-        console.log("매칭 실패: DB에 다음 ISSN들이 있는지 확인 필요 ->", issnList);
-      } else {
-        console.log("매칭 성공! 데이터:", jcrData);
+      // 상위 % 계산 (소수점 첫째 자리까지)
+      let percentileStr = 'N/A';
+      if (jcrData?.Rank && jcrData?.['Number of same category']) {
+        const calc = (jcrData.Rank / jcrData['Number of same category']) * 100;
+        percentileStr = `${calc.toFixed(1)}%`;
       }
 
       const newPaper = {
@@ -78,7 +75,8 @@ export default function PaperManager() {
         title: info.title[0],
         journal: jcrData?.['Journal Title'] || info['container-title'][0],
         year: info.created['date-parts'][0][0],
-        impact_factor: jcrData?.IF ? jcrData.IF.toFixed(3) : 'N/A'
+        impact_factor: jcrData?.IF ? jcrData.IF.toFixed(3) : 'N/A',
+        percentile: percentileStr // 계산된 백분율 저장
       };
 
       const { data: savedData, error } = await supabase
