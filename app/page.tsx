@@ -57,7 +57,7 @@ export default function PaperManager() {
       // 3. Supabase JCR 테이블 조회 (유연한 검색 방식)
       const { data: jcrRows, error: jcrError } = await supabase
         .from('jcr_impact_factors')
-        .select('"IF", "Journal Title", "ISSN"')
+        .select('*')
         // .ilike를 사용하여 하이픈 유무와 상관없이 숫자 패턴이 포함되어 있는지 확인
         .ilike('ISSN', `%${digitsOnly.slice(0, 4)}%${digitsOnly.slice(4)}%`) 
         .order('IF', { ascending: false })
