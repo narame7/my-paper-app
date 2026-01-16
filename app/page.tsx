@@ -49,13 +49,20 @@ export default function PaperManager() {
       const info = data.message;
       const issnList = info.ISSN || [];
 
-      // JCR 매칭 (여러 ISSN 대응을 위해 .in() 사용)
-      const { data: jcrData } = await supabase
+      // 3. Supabase JCR 테이블 조회 (중복 행 문제 해결)
+      const { data: jcrRows, error: jcrError } = await supabase
         .from('jcr_impact_factors')
         .select('"IF", "Journal Title"')
-        .in('ISSN', issnList)
-        .limit(1)
-        .maybeSingle();
+        .in('ISSN', issnList) // 여러 ISSN 대응
+        .order('IF', { ascending: false }) // IF 점수가 높은 순으로 정렬
+        .limit(1); // 가장 높은 점수 1개만 선택
+
+      if (jcrError) console.error("JCR 조회 에러:", jcrError.message);
+
+      // jcrRows는 배열로 반환되므로 첫 번째 요소를 선택합니다.
+      const jcrData = jcrRows && jcrRows.length > 0 ? jcrRows[0] : null;
+
+      console.log("매칭된 최종 JCR 데이터:", jcrData);
 
       const newPaper = {
         doi,
