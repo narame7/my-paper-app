@@ -141,7 +141,14 @@ export default function PaperManager() {
                     {p.percentile}
                   </span>
                 </td>
-                {/* ... 삭제 버튼 */}
+                <td className="p-4 text-center">
+                  <button 
+                    onClick={() => deletePaper(p.id)}
+                    className="text-red-500 hover:text-red-700 text-sm font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
