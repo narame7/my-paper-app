@@ -32,27 +32,36 @@ export default function PaperManager() {
       // 2. CrossRef API로 논문 기본 정보 가져오기
       const res = await fetch(`https://api.crossref.org/works/${doi}`);
       const data = await res.json();
+      
       const info = data.message;
-      const issn = info.ISSN ? info.ISSN[0] : null;
+      const issnFromCrossRef = info.ISSN ? info.ISSN[0] : null;
 
-      // 3. Supabase JCR 테이블에서 IF 매칭하기
-      // 주의: 컬럼명이 "ISSN" (대문자), "IF" (대문자), "Journal Title" (공백 포함) 임에 유의하세요.
+      // 3. Supabase JCR 테이블 조회
+      // 컬럼명에 대문자가 포함되어 있으므로 따옴표 처리에 유의해야 합니다.
       const { data: jcrData, error: jcrError } = await supabase
         .from('jcr_impact_factors')
-        .select('"IF", "Journal Title"') // 공백이 있는 경우 따옴표로 감싸는 것이 안전합니다.
-        .eq('ISSN', issn) // CrossRef에서 가져온 ISSN과 매칭
-        .limit(1) // 동일 ISSN에 여러 카테고리가 있을 수 있으므로 하나만 가져옵니다.
-        .maybeSingle(); // 결과가 없어도 에러(빨간색 로그)를 내지 않고 null을 반환합니다.
+        .select('*') // 일단 전체 컬럼을 가져와서 매칭 확인
+        .eq('ISSN', issnFromCrossRef) 
+        .maybeSingle();
 
-      if (jcrError) console.log("JCR 매칭 실패:", jcrError.message);
+      if (jcrError) {
+        console.error("JCR 조회 에러:", jcrError.message);
+      }
+
+      // 데이터 확인을 위한 로그 (브라우저 F12 콘솔에서 확인 가능)
+      console.log("CrossRef ISSN:", issnFromCrossRef);
+      console.log("DB에서 찾은 데이터:", jcrData);
+
+      // 4. 결과 매칭 (DB 컬럼명과 정확히 일치해야 함)
+      const impactFactor = jcrData && jcrData.IF ? String(jcrData.IF) : 'N/A';
+      const journalName = jcrData && jcrData['Journal Title'] ? jcrData['Journal Title'] : info['container-title'][0];
 
       const newPaper = {
         doi,
         title: info.title[0],
-        // JCR에 정보가 있으면 JCR의 공식 명칭을, 없으면 CrossRef 명칭 사용
-        journal: jcrData?.['Journal Title'] || info['container-title'][0],
+        journal: journalName,
         year: info.created['date-parts'][0][0],
-        impact_factor: jcrData?.IF ? jcrData.IF.toFixed(3) : 'N/A' // real 타입을 소수점 3자리까지 표시
+        impact_factor: impactFactor
       };
 
       // 4. 결과 DB에 저장하기
