@@ -47,26 +47,31 @@ export default function PaperManager() {
       const res = await fetch(`https://api.crossref.org/works/${doi}`);
       const data = await res.json();
       
-      // 2. CrossRef 데이터 추출 및 숫자만 추출
+      // 2. CrossRef 데이터 추출
       const info = data.message;
-      const rawIssn = info.ISSN ? info.ISSN[0] : null;
+      const issnList = info.ISSN || []; // 보통 [p-ISSN, e-ISSN] 형태로 들어옵니다.
 
-      // ISSN에서 숫자 8자리만 추출 (예: 1234-5678 -> 12345678)
-      const digitsOnly = rawIssn ? rawIssn.replace(/[^0-9X]/gi, '') : '';
+      console.log("CrossRef에서 받은 ISSN 리스트:", issnList);
 
-      // 3. Supabase JCR 테이블 조회 (유연한 검색 방식)
+      // 3. Supabase JCR 테이블 조회
+      // .in() 연산자는 배열 안의 값 중 하나라도 일치하면 데이터를 가져옵니다.
       const { data: jcrRows, error: jcrError } = await supabase
         .from('jcr_impact_factors')
-        .select('*')
-        // .ilike를 사용하여 하이픈 유무와 상관없이 숫자 패턴이 포함되어 있는지 확인
-        .ilike('ISSN', `%${digitsOnly.slice(0, 4)}%${digitsOnly.slice(4)}%`) 
+        .select('"IF", "Journal Title", "ISSN"')
+        .in('ISSN', issnList) // [ '1234-5678', '8765-4321' ] 중 일치하는 것 검색
         .order('IF', { ascending: false })
         .limit(1);
 
-      console.log("시도한 숫자 패턴:", digitsOnly);
-      console.log("매칭된 최종 JCR 데이터:", jcrRows?.[0] || '데이터 없음');
+      if (jcrError) console.error("JCR 조회 중 에러 발생:", jcrError.message);
 
       const jcrData = jcrRows && jcrRows.length > 0 ? jcrRows[0] : null;
+
+      // 디버깅: 실제 매칭 결과를 콘솔에 출력
+      if (!jcrData) {
+        console.log("매칭 실패: DB에 다음 ISSN들이 있는지 확인 필요 ->", issnList);
+      } else {
+        console.log("매칭 성공! 데이터:", jcrData);
+      }
 
       const newPaper = {
         doi,
